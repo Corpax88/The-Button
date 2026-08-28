@@ -3,11 +3,12 @@
 		"wait":
 			_place_button_center()
 			var token := wait_token
-			wait_allowed_ms = Time.get_ticks_msec() + rng.randi_range(650, 2100)
+			var wait_seconds := rng.randf_range(0.65, 2.10)
+			wait_allowed_ms = Time.get_ticks_msec() + int(wait_seconds * 1000.0)
 			main_button.text = "WAIT"
 			main_button.disabled = true
 			if announce: _say(_pick_fresh(["Don't.", "Wait.", "Hands off."]))
-			get_tree().create_timer((wait_allowed_ms - Time.get_ticks_msec()) / 1000.0).timeout.connect(_arm_wait_button.bind(token))
+			get_tree().create_timer(wait_seconds).timeout.connect(_arm_wait_button.bind(token))
 		"bounce":
 			_place_button_center()
 			bounce_velocity = Vector2(rng.randf_range(250, 470), rng.randf_range(210, 390))
