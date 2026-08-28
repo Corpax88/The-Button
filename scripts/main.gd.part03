@@ -1,0 +1,180 @@
+			_spawn_decoys(true)
+			if announce: _say(_pick_fresh(["Now they all look confident.", "Pick one.", "Surely this is fair."]))
+		"wait":
+			_place_button_center()
+			var token := wait_token
+			wait_allowed_ms = Time.get_ticks_msec() + rng.randi_range(650, 2100)
+			main_button.text = "WAIT"
+			main_button.disabled = true
+			if announce: _say(_pick_fresh(["Don't.", "Wait.", "Hands off."]))
+			get_tree().create_timer((wait_allowed_ms - Time.get_ticks_msec()) / 1000.0).timeout.connect(_arm_wait_button.bind(token))
+		"bounce":
+			_place_button_center()
+			bounce_velocity = Vector2(rng.randf_range(250, 470), rng.randf_range(210, 390))
+			if rng.randf() < 0.5: bounce_velocity.x *= -1
+			if rng.randf() < 0.5: bounce_velocity.y *= -1
+			main_button.text = "GET IT"
+			if announce: _say(_counter_line("bounce"))
+		"anti_spam":
+			_teleport_button()
+			main_button.text = "SLOW"
+			if announce: _say(_counter_line("spam"))
+		"dodge":
+			_teleport_button()
+			dodge_escapes_left = rng.randi_range(1, 3)
+			main_button.text = "TRY"
+			if announce: _say(_pick_fresh(["Catch me.", "Go ahead.", "This one has opinions."]))
+		"fade":
+			_teleport_button()
+			main_button.modulate.a = rng.randf_range(0.16, 0.42)
+			main_button.text = "HERE"
+			if announce: _say(_pick_fresh(["I'm still here.", "Eyes open.", "Visibility is a privilege."]))
+		"corner":
+			_place_in_corner()
+			main_button.size = Vector2(175, 92)
+			main_button.text = "HI"
+			if announce: _say(_pick_fresh(["Look around.", "Center is overrated.", "Found the corner?"]))
+		"shrink":
+			_place_button_center()
+			shrink_clicks_left = rng.randi_range(2, 4)
+			main_button.text = str(shrink_clicks_left)
+			if announce: _say(_pick_fresh(["A few more.", "Each one costs size.", "Keep going."]))
+		"sequence":
+			_place_button_center()
+			sequence_left = rng.randi_range(2, 4)
+			sequence_expected = 1
+			main_button.text = "1"
+			if announce: _say(_pick_fresh(["In order.", "Count with me.", "Simple. Probably."]))
+		"fake_lock":
+			_place_button_center()
+			fake_lock = true
+			main_button.text = "DISABLED"
+			if announce: _say(_pick_fresh(["I disabled it.", "Nothing to do here.", "Button privileges revoked."]))
+		"wrong_label":
+			_teleport_button()
+			main_button.text = _pick(["DON'T PRESS", "EXIT", "DELETE", "NO"])
+			if announce: _say(_pick_fresh(["Read carefully.", "Words are trustworthy.", "This label means something."]))
+		"late_move":
+			_place_button_center()
+			main_button.text = "PRESS"
+			if announce: _say(_pick_fresh(["Normal one.", "Nothing weird.", "Go on."]))
+		"pulse_target":
+			_teleport_button()
+			main_button.text = "PRESS"
+			if announce: _say(_pick_fresh(["Breathing room.", "It's alive enough.", "Timing helps."]))
+
+func _apply_modifiers() -> void:
+	for m in current_modifiers:
+		match m:
+			"tilt":
+				main_button.rotation = deg_to_rad(rng.randf_range(-28.0, 28.0))
+			"dim":
+				main_button.modulate.a *= rng.randf_range(0.48, 0.78)
+			"jitter":
+				pass
+			"soft_move":
+				_teleport_button()
+			"narrow":
+				main_button.size.x *= rng.randf_range(0.55, 0.72)
+			"wide":
+				main_button.size.x *= rng.randf_range(1.25, 1.65)
+				_clamp_button_to_arena()
+			"color_shift":
+				var hue := rng.randf()
+				button_normal = Color.from_hsv(hue, 0.52, 0.95)
+				button_hover = button_normal.lightened(0.10)
+				button_pressed = button_normal.darkened(0.12)
+				_apply_button_style()
+			"small_text":
+				main_button.add_theme_font_size_override("font_size", rng.randi_range(12, 20))
+			"quiet":
+				speech.modulate.a = 0.55
+			"restless":
+				pass
+			"offcenter":
+				main_button.pivot_offset = Vector2(rng.randf_range(0.0, main_button.size.x), rng.randf_range(0.0, main_button.size.y))
+
+func _handle_double() -> void:
+	var now := Time.get_ticks_msec()
+	if double_first_ms > 0 and now - double_first_ms <= DOUBLE_WINDOW_MS:
+		double_first_ms = 0
+		_success(_pick_fresh(["Two.", "Fine.", "You got it."]))
+	else:
+		double_first_ms = now
+		main_button.text = "AGAIN"
+		_say(_pick_fresh(["That was one.", "Again.", "One more."]))
+
+func _handle_anti_spam() -> void:
+	if intervals.is_empty():
+		_success()
+		return
+	var latest: float = intervals.back()
+	if latest < 0.48:
+		misses += 1
+		streak = 0
+		_stat_fail("anti_spam")
+		_say(_pick_fresh(["Too fast.", "Human speed, please.", "Suspicious rhythm.", "Nope."]))
+		_teleport_button()
+	else:
+		_success(_pick_fresh(["Restraint. Impressive.", "Better.", "See? You can wait."]))
+
+func _handle_wait() -> void:
+	var now := Time.get_ticks_msec()
+	if now < wait_allowed_ms:
+		misses += 1
+		streak = 0
+		_stat_fail("wait")
+		_say(_pick_fresh(["I literally said wait.", "Predictable.", "That was the test."]))
+	else:
+		_success(_pick_fresh(["NOW worked.", "Patient enough.", "Annoyingly correct."]))
+
+func _handle_fake_lock() -> void:
+	if fake_lock:
+		fake_lock = false
+		main_button.text = "..."
+		_say(_pick_fresh(["Oh.", "You tried anyway.", "You don't trust labels. Good."]))
+		get_tree().create_timer(rng.randf_range(0.35, 0.75)).timeout.connect(func():
+			if current_behavior == "fake_lock":
+				main_button.text = "FINE"
+		)
+	else:
+		_success()
+
+func _handle_sequence() -> void:
+	if sequence_left <= 1:
+		_success(_pick_fresh(["Counted.", "You can count.", "Fine."]))
+		return
+	sequence_left -= 1
+	sequence_expected += 1
+	main_button.text = str(sequence_expected)
+	_teleport_button()
+	_say(_pick_fresh(["Next.", "Keep up.", "Again."]))
+
+func _handle_shrink() -> void:
+	if shrink_clicks_left <= 1:
+		_success(_pick_fresh(["Small enough.", "You kept going.", "There."]))
+		return
+	shrink_clicks_left -= 1
+	main_button.size = Vector2(maxf(MIN_BUTTON_SIZE.x, main_button.size.x * 0.72), maxf(MIN_BUTTON_SIZE.y, main_button.size.y * 0.72))
+	main_button.add_theme_font_size_override("font_size", maxi(13, 18 + shrink_clicks_left * 3))
+	main_button.text = str(shrink_clicks_left)
+	_teleport_button()
+
+func _spawn_decoys(moving: bool) -> void:
+	main_button.size = Vector2(210, 112)
+	_teleport_button()
+	main_button.text = _pick(["BUTTON", "ME", "REAL"])
+	var count := rng.randi_range(2, clampi(3 + int(successes / 30), 3, 7))
+	for i in range(count):
+		var decoy := Button.new()
+		decoy.text = _pick(["BUTTON", "ME", "PRESS", "REAL", "100% ME", "TRUST ME"])
+		decoy.focus_mode = Control.FOCUS_NONE
+		decoy.size = Vector2(rng.randf_range(155, 225), rng.randf_range(82, 118))
+		decoy.add_theme_font_size_override("font_size", rng.randi_range(20, 28))
+		decoy.add_theme_color_override("font_color", Color("#f7f2e8"))
+		var decoy_color := Color.from_hsv(rng.randf(), 0.58, 0.72)
+		decoy.add_theme_stylebox_override("normal", _panel_style(decoy_color, 28, Color("#ffffff55"), 2))
+		decoy.add_theme_stylebox_override("hover", _panel_style(decoy_color.lightened(0.12), 28, Color("#ffffff"), 3))
+		decoy.add_theme_stylebox_override("pressed", _panel_style(decoy_color.darkened(0.12), 28, Color("#ffffff"), 2))
+		arena.add_child(decoy)
+		decoys.append(decoy)
